@@ -1,0 +1,3 @@
+name: PyDeepTorcs
+dependencies:
+  - python=3.6.*
