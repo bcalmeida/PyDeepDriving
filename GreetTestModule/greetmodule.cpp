@@ -1,4 +1,5 @@
-#include "libmypy.h"
+#include <Python.h>
+
 
 // #include <glog/logging.h>
 // #include <leveldb/db.h>
@@ -1005,3 +1006,67 @@ int torcs_run(int argc, char** argv) {
 
 
 
+// int torcs_run(int argc, char** argv) {
+//     printf(argv[0]);printf("\n");
+//     printf(argv[1]);printf("\n");
+//     printf(argv[2]);printf("\n");
+//     return 1;
+// }
+
+static PyObject *
+greet_name(PyObject *self, PyObject *args)
+{
+    const char *name;
+
+    if (!PyArg_ParseTuple(args, "s", &name))
+    {
+        return NULL;
+    }
+
+    ////////
+    // allocate space for 3 pointers to strings
+    char **strings = (char**)malloc(3*sizeof(char*));
+    int i = 0;
+    // allocate space for each string
+    // here allocate 50 bytes, which is more than enough for the strings
+    for(i = 0; i < 3; i++){
+        printf("%d\n", i);
+        strings[i] = (char*)malloc(150*sizeof(char));
+    }
+    //assign them all something
+    sprintf(strings[0], "/home/bcalmeida/dev/tg/DeepDriving/Caffe_driving/torcs/pre_trained/driving_run_1F.prototxt");
+    sprintf(strings[1], "/home/bcalmeida/dev/tg/DeepDriving/Caffe_driving/torcs/pre_trained/driving_train_1F_iter_140000.caffemodel");
+    sprintf(strings[2], "GPU");
+
+    torcs_run(1, strings);
+    ////////
+
+    printf("Hello %s!\n", name);
+
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef GreetMethods[] = {
+    {"greet", greet_name, METH_VARARGS, "Greet an entity."},
+    {NULL, NULL, 0, NULL}
+};
+
+static struct PyModuleDef greet =
+{
+    PyModuleDef_HEAD_INIT,
+    "greet",     /* name of module */
+    "",          /* module documentation, may be NULL */
+    -1,          /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
+    GreetMethods
+};
+
+// PyMODINIT_FUNC
+// initgreet(void)
+// {
+//     (void) Py_InitModule("greet", GreetMethods);
+// }
+
+PyMODINIT_FUNC PyInit_greet(void)
+{
+    return PyModule_Create(&greet);
+}

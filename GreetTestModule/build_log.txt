@@ -1,0 +1,32 @@
+(PyDeepTorcs) bcalmeida@bcalmeida-mbp-ubuntu:~/dev/PyDeepTorcs$ ./build.sh 
+running build_ext
+building 'greet' extension
+creating build/temp.linux-x86_64-3.6
+gcc -pthread -B /home/bcalmeida/anaconda2/envs/PyDeepTorcs/compiler_compat -Wl,--sysroot=/ -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes -fPIC -I/usr/local/include -I/home/bcalmeida/anaconda2/envs/PyDeepTorcs/include/python3.6m -c greetmodule.cpp -o build/temp.linux-x86_64-3.6/greetmodule.o
+cc1plus: warning: command line option ‘-Wstrict-prototypes’ is valid for C/ObjC but not for C++ [enabled by default]
+greetmodule.cpp: In function ‘int torcs_run(int, char**)’:
+greetmodule.cpp:95:83: warning: format ‘%X’ expects argument of type ‘unsigned int’, but argument 2 has type ‘void*’ [-Wformat=]
+     printf("\n********** Memory sharing started, attached at %X **********\n", shm); 
+                                                                                   ^
+greetmodule.cpp:244:11: warning: unused variable ‘dist_LL_record’ [-Wunused-variable]
+     float dist_LL_record=30;
+           ^
+greetmodule.cpp:245:11: warning: unused variable ‘dist_RR_record’ [-Wunused-variable]
+     float dist_RR_record=30;
+           ^
+greetmodule.cpp:905:40: warning: ‘car_pos’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+                    pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+                                        ^
+greetmodule.cpp:581:191: warning: ‘desired_speed’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+             printf("coe_steer:%.1lf, lane_change:%d, steer:%.2lf, d_speed:%d, speed:%d, l_clear:%d, r_clear:%d, timer_set:%d\n\n", coe_steer, lane_change, shared->steerCmd, int(desired_speed*3.6), int(shared->speed*3.6), left_clear, right_clear, timer_set);
+                                                                                                                                                                                               ^
+greetmodule.cpp:494:22: warning: ‘pre_MR’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+                      if (-pre_ML>pre_MR)
+                      ^
+greetmodule.cpp:494:33: warning: ‘pre_ML’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+                      if (-pre_ML>pre_MR)
+                                 ^
+greetmodule.cpp:549:55: warning: ‘center_line’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+                shared->steerCmd = (angle - center_line/road_width) / 0.541052/coe_steer;  // steering control, "shared->steerCmd" [-1,1] is the value sent back to TORCS
+                                                       ^
+g++ -pthread -shared -B /home/bcalmeida/anaconda2/envs/PyDeepTorcs/compiler_compat -L/home/bcalmeida/anaconda2/envs/PyDeepTorcs/lib -Wl,-rpath=/home/bcalmeida/anaconda2/envs/PyDeepTorcs/lib -Wl,--no-as-needed -Wl,--sysroot=/ build/temp.linux-x86_64-3.6/greetmodule.o -L/usr/lib -L/usr/local/lib -lopencv_core -lopencv_highgui -lopencv_imgproc -o /home/bcalmeida/dev/PyDeepTorcs/greet.cpython-36m-x86_64-linux-gnu.so
