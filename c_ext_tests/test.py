@@ -1,0 +1,101 @@
+import drive
+from contextlib import contextmanager
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Test 1
+# drive.test_shared_memory()
+
+# Test 2
+# drive.setup_shared_memory()
+# while True:
+#     written = drive.is_written()
+#     print("written is " + str(written))
+#     inp = input()
+#     if inp == 'x':
+#         drive.close_shared_memory()
+#         break
+#     elif inp == 'w':
+#         drive.write(not written)
+
+# Test 3
+@contextmanager
+def shared_memory(*args, **kwds):
+    drive.setup_shared_memory()
+    try:
+        yield None
+    finally:
+        drive.close_shared_memory()
+
+# with shared_memory() as _:
+#     while True:
+#         written = drive.is_written()
+#         print("written is " + str(written))
+#         inp = input()
+#         if inp == 'x':
+#             break
+#         elif inp == 'w':
+#             drive.write(not written)
+
+# Test 4
+# with shared_memory() as _:
+#     drive.setup_opencv()
+#     while True:
+#         paused = drive.is_paused()
+#         written = drive.is_written()
+#         print("written is ", written)
+#         print("paused is ", paused)
+#         inp = input("Enter input:")
+#         if inp == 'p':
+#             drive.pause(not paused)
+#         elif inp == 'w':
+#             drive.write(not written)
+
+
+        # if drive.is_written():
+        #     print('reading img')
+        #     img = drive.read_image()
+        #     print(img)
+
+        # if drive.is_written():
+        #     print('wut')
+        #     input()
+        #     #img = drive.read_shared_memory()
+        #     #print(img)
+
+            # img, ground_truth = drive.read_shared_memory()
+            # drive_commands = drive.controller(ground_truth)
+            # drive.write_commands()
+
+WIDTH = 280
+HEIGHT = 210
+
+# Test 5
+# with shared_memory() as _:
+#     drive.setup_opencv()
+#     while True:
+#         paused = drive.is_paused()
+#         print("paused is ", paused)
+#         inp = input("Enter input:")
+#         if inp == 'p':
+#             drive.pause(not paused)
+#         if drive.is_written():
+#             print("Reading img")
+#             img = drive.read_image() # HWC, BGR
+#             img_np = np.asarray(img).reshape(HEIGHT, WIDTH, 3)[:,:,::-1].astype('uint8') # HWC, RGB
+#             # import pdb; pdb.set_trace()
+#             plt.imshow(img_np)
+#             plt.show()
+#             drive.write(False) # needs to do this so torcs continues and writes again
+
+# Test 6
+with shared_memory() as _:
+    drive.setup_opencv()
+    print("paused is ", drive.is_paused())
+    drive.pause(False)
+    print("paused is ", drive.is_paused())
+    while True:
+        if drive.is_written():
+            ground_truth = drive.read_indicators()
+            print(ground_truth)
+            drive.write(False)
