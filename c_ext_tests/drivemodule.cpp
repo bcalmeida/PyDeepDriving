@@ -219,6 +219,14 @@ static void pauseDrive(bool pause) {
     shared->pause = !pause;
 }
 
+static bool isControlling() {
+    return shared->control;
+}
+
+static void setControl(bool control) {
+    shared->control = control;
+}
+
 static void setupOpencv() {
     screenRGB=cvCreateImage(cvSize(image_width,image_height),IPL_DEPTH_8U,3);
     resizeRGB=cvCreateImage(cvSize(resize_width,resize_height),IPL_DEPTH_8U,3);
@@ -317,8 +325,7 @@ int manual=0;
 int counter=0;
 ////////////////////// END visualization parameters
 
-/* TODO
-static double * controller(double *indicators) {
+static void controller(){//double *indicators) {
     double angle=indicators[14];
 
     double toMarking_L=indicators[3];
@@ -528,7 +535,6 @@ static double * controller(double *indicators) {
     fflush(stdout);
     //////////////////////////////////////////////// END a controller processes the cnn output and get the optimal steering, acceleration/brake
 }
-*/
 
 /////////////////////
 // Python Wrappers //
@@ -580,6 +586,20 @@ static PyObject * pause_py(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
+static PyObject * isControlling_py(PyObject *self, PyObject *args) {
+    if(isControlling()) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
+}
+
+static PyObject * setControl_py(PyObject *self, PyObject *args) {
+    bool control;
+    if (!PyArg_ParseTuple(args, "p", &control)) return NULL;
+    setControl(control);
+    Py_RETURN_NONE;
+}
+
 static PyObject * setupOpencv_py(PyObject *self, PyObject *args) {
     setupOpencv();
     // return Py_None;
@@ -603,6 +623,13 @@ static PyObject * readIndicators_py(PyObject *self, PyObject *args) {
         PyList_SetItem(list, i, Py_BuildValue("d", indicators[i])); // d (float) [double]
     }
     return list;
+}
+
+static PyObject * controller_py(PyObject *self, PyObject *args) {
+    //double * inds;
+    //if (!PyArg_ParseTuple(args, "?", inds)) return NULL;
+    controller();//inds);
+    Py_RETURN_NONE;
 }
 
 ///////////////////
@@ -639,6 +666,14 @@ static struct PyMethodDef drive_mets[] = {
         "Updates pause flag on shared memory."
     },
     {
+        "is_controlling", isControlling_py, METH_VARARGS,
+        "Control flag."
+    },
+    {
+        "set_control", setControl_py, METH_VARARGS,
+        "Control flag."
+    },
+    {
         "setup_opencv", setupOpencv_py, METH_VARARGS,
         "Setup opencv."
     },
@@ -649,6 +684,10 @@ static struct PyMethodDef drive_mets[] = {
     {
         "read_indicators", readIndicators_py, METH_VARARGS,
         "Read indicators from shared memory."
+    },
+    {
+        "controller", controller_py, METH_VARARGS,
+        "Outputs control commands given indicators"
     },
 	{NULL, NULL, 0, NULL} /* Sentinel */
 };

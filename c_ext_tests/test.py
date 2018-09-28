@@ -88,14 +88,30 @@ HEIGHT = 210
 #             plt.show()
 #             drive.write(False) # needs to do this so torcs continues and writes again
 
-# Test 6
+# # Test 6: read_indicators
+# with shared_memory() as _:
+#     drive.setup_opencv()
+#     print("paused is ", drive.is_paused())
+#     drive.pause(False)
+#     print("paused is ", drive.is_paused())
+#     while True:
+#         if drive.is_written():
+#             ground_truth = drive.read_indicators()
+#             print(ground_truth)
+#             drive.write(False)
+
+
+# Test 7: controller
 with shared_memory() as _:
     drive.setup_opencv()
-    print("paused is ", drive.is_paused())
-    drive.pause(False)
-    print("paused is ", drive.is_paused())
+    drive.pause(False) # TORCS may share images and ground truth
+    print("Controlling: ", drive.is_controlling())
+    drive.set_control(True)
+    print("Controlling: ", drive.is_controlling)
+    input("Press key to start...")
     while True:
         if drive.is_written():
             ground_truth = drive.read_indicators()
             print(ground_truth)
-            drive.write(False)
+            drive.controller(ground_truth)
+            drive.write(False) # Shared data read, and TORCS may continue
