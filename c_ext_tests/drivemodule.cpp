@@ -1025,15 +1025,20 @@ static PyObject * readIndicators_py(PyObject *self, PyObject *args) {
     return list;
 }
 
-static PyObject * controller_py(PyObject *self, PyObject *args) {
-    PyObject *pyList;
-    double *indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
-    if (!PyArg_ParseTuple(args, "O", &pyList)) return NULL; // O (object) [PyObject *]
-    for(Py_ssize_t i = 0; i < INDICATORS_SIZE; i++) {
+static double * parseFloatList(PyObject *pyList, int size) {
+    double *cList = (double *) calloc(size, sizeof(double));
+    for(Py_ssize_t i = 0; i < size; i++) {
         double d = PyFloat_AsDouble(PyList_GetItem(pyList, i)); // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
         if (PyErr_Occurred()) return NULL;
-        indicators[i] = d;
+        cList[i] = d;
     }
+    return cList;
+}
+
+static PyObject * controller_py(PyObject *self, PyObject *args) {
+    PyObject *pyIndicators;
+    if (!PyArg_ParseTuple(args, "O", &pyIndicators)) return NULL; // O (object) [PyObject *]
+    double *indicators = parseFloatList(pyIndicators, INDICATORS_SIZE);
     controller(indicators);
     free(indicators);
     Py_RETURN_NONE;
@@ -1042,18 +1047,9 @@ static PyObject * controller_py(PyObject *self, PyObject *args) {
 static PyObject * updateVisualizations_py(PyObject *self, PyObject *args) {
     PyObject *pyIndicators;
     PyObject *pyGroundTruth;
-    double *indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
-    double *groundTruth = (double *) calloc(INDICATORS_SIZE, sizeof(double));
     if (!PyArg_ParseTuple(args, "OO", &pyIndicators, &pyGroundTruth)) return NULL; // O (object) [PyObject *]
-    for(Py_ssize_t i = 0; i < INDICATORS_SIZE; i++) {
-        double d = PyFloat_AsDouble(PyList_GetItem(pyIndicators, i));
-        if (PyErr_Occurred()) return NULL; // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
-        indicators[i] = d;
-
-        double d2 = PyFloat_AsDouble(PyList_GetItem(pyGroundTruth, i));
-        if (PyErr_Occurred()) return NULL; // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
-        groundTruth[i] = d2;
-    }
+    double *indicators = parseFloatList(pyIndicators, INDICATORS_SIZE);
+    double *groundTruth = parseFloatList(pyGroundTruth, INDICATORS_SIZE);
     updateVisualizations(indicators, groundTruth);
     free(indicators);
     free(groundTruth);
