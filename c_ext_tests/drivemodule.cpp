@@ -18,6 +18,7 @@
 #define resize_height 210
 #define semantic_width 320
 #define semantic_height 660
+#define INDICATORS_SIZE 16
 
 struct shared_use_st
 {  
@@ -256,8 +257,8 @@ static uint8_t * readImage() {
     return (uint8_t *) resizeRGB->imageData;
 }
 
-double indicators[16];
 static double * readIndicators() {
+    double * indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
     indicators[0]  = shared->fast;
     indicators[1]  = shared->dist_L;
     indicators[2]  = shared->dist_R;
@@ -274,7 +275,6 @@ static double * readIndicators() {
     indicators[13] = shared->toMiddle;
     indicators[14] = shared->angle;
     indicators[15] = shared->speed;
-
     return indicators;
 }
 
@@ -325,7 +325,7 @@ int manual=0;
 int counter=0;
 ////////////////////// END visualization parameters
 
-static void controller(){//double *indicators) {
+static void controller(double *indicators) {
     double angle=indicators[14];
 
     double toMarking_L=indicators[3];
@@ -622,13 +622,21 @@ static PyObject * readIndicators_py(PyObject *self, PyObject *args) {
     for(size_t i = 0; i < 16; i++) {
         PyList_SetItem(list, i, Py_BuildValue("d", indicators[i])); // d (float) [double]
     }
+    free(indicators);
     return list;
 }
 
 static PyObject * controller_py(PyObject *self, PyObject *args) {
-    //double * inds;
-    //if (!PyArg_ParseTuple(args, "?", inds)) return NULL;
-    controller();//inds);
+    PyObject *pyList;
+    double *indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
+    if (!PyArg_ParseTuple(args, "O", &pyList)) return NULL; // Warning. TODO: any prob?
+    for(Py_ssize_t i = 0; i < INDICATORS_SIZE; i++) {
+        double d = PyFloat_AsDouble(PyList_GetItem(pyList, i)); // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
+        if (PyErr_Occurred()) return NULL;
+        indicators[i] = d;
+    }
+    controller(indicators);
+    free(indicators);
     Py_RETURN_NONE;
 }
 

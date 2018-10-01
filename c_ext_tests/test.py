@@ -107,7 +107,7 @@ with shared_memory() as _:
     drive.pause(False) # TORCS may share images and ground truth
     print("Controlling: ", drive.is_controlling())
     drive.set_control(True)
-    print("Controlling: ", drive.is_controlling)
+    print("Controlling: ", drive.is_controlling())
     input("Press key to start...")
     while True:
         if drive.is_written():
