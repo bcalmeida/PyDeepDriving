@@ -340,44 +340,37 @@ static double * readIndicators() {
     return indicators;
 }
 
-static void updateVisualizations(double *indicators) { //, double *groundTruth) {
+static void updateVisualizations(double *indicators, double *groundTruth) {
+    // indicators
     double angle=indicators[14];
-
+    double dist_L=indicators[1];
+    double dist_R=indicators[2];
     double toMarking_L=indicators[3];
     double toMarking_M=indicators[4];
     double toMarking_R=indicators[5];
-
-    double dist_L=indicators[1];
-    double dist_R=indicators[2];
-
+    double dist_LL=indicators[6];
+    double dist_MM=indicators[7];
+    double dist_RR=indicators[8];
     double toMarking_LL=indicators[9];
     double toMarking_ML=indicators[10];
     double toMarking_MR=indicators[11];
     double toMarking_RR=indicators[12];
 
-    double dist_LL=indicators[6];
-    double dist_MM=indicators[7];
-    double dist_RR=indicators[8];
-
-    // TODO: Use groundTruth as input
-    double true_angle = shared->angle;
-    int true_fast = int(shared->fast);
-
-    double true_dist_L = shared->dist_L;
-    double true_dist_R = shared->dist_R;
-
-    double true_toMarking_L = shared->toMarking_L;
-    double true_toMarking_M = shared->toMarking_M;
-    double true_toMarking_R = shared->toMarking_R;
-
-    double true_dist_LL = shared->dist_LL;
-    double true_dist_MM = shared->dist_MM;
-    double true_dist_RR = shared->dist_RR;
-
-    double true_toMarking_LL = shared->toMarking_LL;
-    double true_toMarking_ML = shared->toMarking_ML;
-    double true_toMarking_MR = shared->toMarking_MR;
-    double true_toMarking_RR = shared->toMarking_RR;
+    // ground truth
+    double true_angle = groundTruth[14];
+    // int true_fast = int(shared->fast); // not used
+    double true_dist_L = groundTruth[1];
+    double true_dist_R = groundTruth[2];
+    double true_toMarking_L = groundTruth[3];
+    double true_toMarking_M = groundTruth[4];
+    double true_toMarking_R = groundTruth[5];
+    double true_dist_LL = groundTruth[6];
+    double true_dist_MM = groundTruth[7];
+    double true_dist_RR = groundTruth[8];
+    double true_toMarking_LL = groundTruth[9];
+    double true_toMarking_ML = groundTruth[10];
+    double true_toMarking_MR = groundTruth[11];
+    double true_toMarking_RR = groundTruth[12];
 
     //////////////////////////////////////////////// show legend and error bar
     printf("show legend and error bar\n");
@@ -935,8 +928,6 @@ static void controller(double *indicators) {
     printf("coe_steer:%.1lf, lane_change:%d, steer:%.2lf, d_speed:%d, speed:%d, l_clear:%d, r_clear:%d, timer_set:%d\n\n", coe_steer, lane_change, shared->steerCmd, int(desired_speed*3.6), int(shared->speed*3.6), left_clear, right_clear, timer_set);
     fflush(stdout);
     //////////////////////////////////////////////// END a controller processes the cnn output and get the optimal steering, acceleration/brake
-
-    updateVisualizations(indicators);
 }
 
 /////////////////////
@@ -1048,6 +1039,27 @@ static PyObject * controller_py(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
+static PyObject * updateVisualizations_py(PyObject *self, PyObject *args) {
+    PyObject *pyIndicators;
+    PyObject *pyGroundTruth;
+    double *indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
+    double *groundTruth = (double *) calloc(INDICATORS_SIZE, sizeof(double));
+    if (!PyArg_ParseTuple(args, "OO", &pyIndicators, &pyGroundTruth)) return NULL; // O (object) [PyObject *]
+    for(Py_ssize_t i = 0; i < INDICATORS_SIZE; i++) {
+        double d = PyFloat_AsDouble(PyList_GetItem(pyIndicators, i));
+        if (PyErr_Occurred()) return NULL; // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
+        indicators[i] = d;
+
+        double d2 = PyFloat_AsDouble(PyList_GetItem(pyGroundTruth, i));
+        if (PyErr_Occurred()) return NULL; // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
+        groundTruth[i] = d2;
+    }
+    updateVisualizations(indicators, groundTruth);
+    free(indicators);
+    free(groundTruth);
+    Py_RETURN_NONE;
+}
+
 static PyObject * waitKey_py(PyObject *self, PyObject *args) {
     int delay; // in milliseconds
     if (!PyArg_ParseTuple(args, "i", &delay)) return NULL;
@@ -1116,6 +1128,10 @@ static struct PyMethodDef drive_mets[] = {
     {
         "controller", controller_py, METH_VARARGS,
         "Outputs control commands given indicators"
+    },
+    {
+        "update_visualizations", updateVisualizations_py, METH_VARARGS,
+        "Updates visualizations given indicators and ground truth."
     },
     {
         "wait_key", waitKey_py, METH_VARARGS,
