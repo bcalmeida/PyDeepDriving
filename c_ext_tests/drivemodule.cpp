@@ -53,15 +53,65 @@ struct shared_use_st
     double brakeCmd;
 };
 
+// shared memory
 struct shared_use_st *shared;
 void *shm = NULL;
 int shmid;
+
+// opencv windows
 IplImage* screenRGB;//=cvCreateImage(cvSize(image_width,image_height),IPL_DEPTH_8U,3);
 IplImage* resizeRGB;//=cvCreateImage(cvSize(resize_width,resize_height),IPL_DEPTH_8U,3);
 IplImage* semanticRGB;//=cvCreateImage(cvSize(semantic_width,semantic_height),IPL_DEPTH_8U,3);
 IplImage* error_bar;//=cvCreateImage(cvSize(640,180),IPL_DEPTH_8U,3);
 IplImage* legend;//=cvLoadImage("Legend6.png"); // was "../torcs/Legend6.png"
 IplImage* background;//=cvLoadImage("semantic_background_3lane.png"); // was "../torcs/semantic_background_3lane.png"
+
+////////////////////// control parameters
+float road_width=8.0;
+float center_line;
+float coe_steer=1.0;
+int lane_change=0;
+float pre_ML;
+float pre_MR;
+float desired_speed;
+float steering_record[5]={0,0,0,0,0};
+int steering_head=0;
+float slow_down=100;
+float dist_LL_record=30;
+float dist_RR_record=30;
+
+int left_clear=0;
+int right_clear=0;
+int left_timer=0;
+int right_timer=0;
+int timer_set=60;
+
+float pre_dist_L=60;
+float pre_dist_R=60;
+float steer_trend;
+////////////////////// END control parameters
+
+////////////////////// visualization parameters
+int marking_head=1;
+int marking_st;
+int marking_end;
+int pace;
+int car_pos;
+int goto_lane=0;
+int true_goto_lane=0;
+
+float p1_x,p1_y,p2_x,p2_y,p3_x,p3_y,p4_x,p4_y;
+CvPoint* pt = new CvPoint[4]; 
+int visualize_angle=1;
+
+float err_angle;
+float err_toMarking_ML;
+float err_toMarking_MR;
+float err_toMarking_M;
+
+int manual=0;
+int counter=0;
+////////////////////// END visualization parameters
 
 static int testSharedMemory() {
     // void *shm = NULL; 
@@ -231,14 +281,27 @@ static void setControl(bool control) {
 static void setupOpencv() {
     screenRGB=cvCreateImage(cvSize(image_width,image_height),IPL_DEPTH_8U,3);
     resizeRGB=cvCreateImage(cvSize(resize_width,resize_height),IPL_DEPTH_8U,3);
-    // semanticRGB=cvCreateImage(cvSize(semantic_width,semantic_height),IPL_DEPTH_8U,3);
-    // error_bar=cvCreateImage(cvSize(640,180),IPL_DEPTH_8U,3);
-    // legend=cvLoadImage("Legend6.png"); // was "../torcs/Legend6.png"
-    // background=cvLoadImage("semantic_background_3lane.png"); // was "../torcs/semantic_background_3lane.png"
+    semanticRGB=cvCreateImage(cvSize(semantic_width,semantic_height),IPL_DEPTH_8U,3);
+    error_bar=cvCreateImage(cvSize(640,180),IPL_DEPTH_8U,3);
+    legend=cvLoadImage("Legend6.png"); // was "../torcs/Legend6.png"
+    background=cvLoadImage("semantic_background_3lane.png"); // was "../torcs/semantic_background_3lane.png"
     cvNamedWindow("Semantic Visualization",1);
     cvNamedWindow("Image from leveldb",1);
     cvNamedWindow("Error Bar",1);
     printf("\n********** Opencv set up **********\n");
+}
+
+static void closeOpencv() {
+    cvDestroyWindow("Image from leveldb");
+    cvDestroyWindow("Semantic Visualization");
+    cvDestroyWindow("Error Bar");
+    cvReleaseImage( &screenRGB );
+    cvReleaseImage( &resizeRGB );
+    cvReleaseImage( &error_bar );
+    cvReleaseImage( &semanticRGB );
+    cvReleaseImage( &background );
+    cvReleaseImage( &legend );
+    printf("\n********** Opencv windows and images cleaned **********\n");
 }
 
 static uint8_t * readImage() {
@@ -251,9 +314,8 @@ static uint8_t * readImage() {
        }
     }
     cvResize(screenRGB,resizeRGB);
-    // Show image
+    // Show image, requires high cvWaitKey, e.g. cvWaitKey(99)
     // cvShowImage("Image from leveldb", resizeRGB);
-    // cvWaitKey(99);
     return (uint8_t *) resizeRGB->imageData;
 }
 
@@ -278,52 +340,391 @@ static double * readIndicators() {
     return indicators;
 }
 
-////////////////////// control parameters
-float road_width=8.0;
-float center_line;
-float coe_steer=1.0;
-int lane_change=0;
-float pre_ML;
-float pre_MR;
-float desired_speed;
-float steering_record[5]={0,0,0,0,0};
-int steering_head=0;
-float slow_down=100;
-float dist_LL_record=30;
-float dist_RR_record=30;
+static void updateVisualizations(double *indicators) { //, double *groundTruth) {
+    double angle=indicators[14];
 
-int left_clear=0;
-int right_clear=0;
-int left_timer=0;
-int right_timer=0;
-int timer_set=60;
+    double toMarking_L=indicators[3];
+    double toMarking_M=indicators[4];
+    double toMarking_R=indicators[5];
 
-float pre_dist_L=60;
-float pre_dist_R=60;
-float steer_trend;
-////////////////////// END control parameters
+    double dist_L=indicators[1];
+    double dist_R=indicators[2];
 
-////////////////////// visualization parameters
-int marking_head=1;
-int marking_st;
-int marking_end;
-int pace;
-int car_pos;
-int goto_lane=0;
-int true_goto_lane=0;
+    double toMarking_LL=indicators[9];
+    double toMarking_ML=indicators[10];
+    double toMarking_MR=indicators[11];
+    double toMarking_RR=indicators[12];
 
-float p1_x,p1_y,p2_x,p2_y,p3_x,p3_y,p4_x,p4_y;
-CvPoint* pt = new CvPoint[4]; 
-int visualize_angle=1;
+    double dist_LL=indicators[6];
+    double dist_MM=indicators[7];
+    double dist_RR=indicators[8];
 
-float err_angle;
-float err_toMarking_ML;
-float err_toMarking_MR;
-float err_toMarking_M;
+    // TODO: Use groundTruth as input
+    double true_angle = shared->angle;
+    int true_fast = int(shared->fast);
 
-int manual=0;
-int counter=0;
-////////////////////// END visualization parameters
+    double true_dist_L = shared->dist_L;
+    double true_dist_R = shared->dist_R;
+
+    double true_toMarking_L = shared->toMarking_L;
+    double true_toMarking_M = shared->toMarking_M;
+    double true_toMarking_R = shared->toMarking_R;
+
+    double true_dist_LL = shared->dist_LL;
+    double true_dist_MM = shared->dist_MM;
+    double true_dist_RR = shared->dist_RR;
+
+    double true_toMarking_LL = shared->toMarking_LL;
+    double true_toMarking_ML = shared->toMarking_ML;
+    double true_toMarking_MR = shared->toMarking_MR;
+    double true_toMarking_RR = shared->toMarking_RR;
+
+    //////////////////////////////////////////////// show legend and error bar
+    printf("show legend and error bar\n");
+    err_angle=(angle-true_angle)*343.8; // full scale +-12 degree
+    if (err_angle>72) err_angle=72;
+    if (err_angle<-72) err_angle=-72;
+
+    if (true_toMarking_ML>-5 && -toMarking_ML+toMarking_MR<5.5) {
+        err_toMarking_ML=(toMarking_ML-true_toMarking_ML)*72; // full scale +-1 meter
+        if (err_toMarking_ML>72) err_toMarking_ML=72;
+        if (err_toMarking_ML<-72) err_toMarking_ML=-72;
+        err_toMarking_MR=(toMarking_MR-true_toMarking_MR)*72; // full scale +-1 meter
+        if (err_toMarking_MR>72) err_toMarking_MR=72;
+        if (err_toMarking_MR<-72) err_toMarking_MR=-72;
+    } else {
+        err_toMarking_ML=0;
+        err_toMarking_MR=0;
+    }
+
+    if (true_toMarking_M<3 && toMarking_M<2) {
+        err_toMarking_M=(toMarking_M-true_toMarking_M)*72; // full scale +-1 meter
+        if (err_toMarking_M>72) err_toMarking_M=72;
+        if (err_toMarking_M<-72) err_toMarking_M=-72;
+    } else {
+        err_toMarking_M=0;
+    }
+
+    int bar_st=26;
+    cvCopy(legend,error_bar);
+    cvRectangle(error_bar,cvPoint(319,bar_st+0-10),cvPoint(319+err_angle,bar_st+0+10),cvScalar(127,127,127),-1);
+    cvRectangle(error_bar,cvPoint(319,bar_st+42-10),cvPoint(319+err_toMarking_ML,bar_st+42+10),cvScalar(190,146,122),-1);
+    cvRectangle(error_bar,cvPoint(319,bar_st+84-10),cvPoint(319+err_toMarking_MR,bar_st+84+10),cvScalar(0,121,0),-1);
+    cvRectangle(error_bar,cvPoint(319,bar_st+126-10),cvPoint(319+err_toMarking_M,bar_st+126+10),cvScalar(128,0,0),-1);
+
+    cvLine(error_bar,cvPoint(319,bar_st-15),cvPoint(319,bar_st+144),cvScalar(0,0,0),1);
+
+    cvShowImage("Error Bar",error_bar);
+    //////////////////////////////////////////////// END show legend and error bar
+    
+    //////////////////////////////////////////////// semantic visualization
+    printf("semantic visualization\n");
+    cvCopy(background,semanticRGB);
+
+    pace=int(shared->speed*1.2);
+    if (pace>50) pace=50;
+
+    marking_head=marking_head+pace;
+    if (marking_head>0) marking_head=marking_head-110;
+    else if (marking_head<-110) marking_head=marking_head+110;
+
+    marking_st=marking_head;
+    marking_end=marking_head+55;
+
+    while (marking_st<=660) {
+        cvLine(semanticRGB,cvPoint(126,marking_st),cvPoint(126,marking_end),cvScalar(255,255,255),2);
+        cvLine(semanticRGB,cvPoint(174,marking_st),cvPoint(174,marking_end),cvScalar(255,255,255),2);
+        marking_st=marking_st+110;
+        marking_end=marking_end+110;
+    }
+
+    char vi_buf[4];
+    sprintf(vi_buf,"%d",int(shared->speed*3.6));
+    CvFont font;
+    cvInitFont(&font, CV_FONT_HERSHEY_COMPLEX, 1, 1, 1, 2, 8);
+    cvPutText(semanticRGB,vi_buf,cvPoint(245,85),&font,cvScalar(255,255,255));
+
+    //////////////// visualize true_angle
+    printf("visualize true_angle\n");
+    if (visualize_angle==1) {
+        true_angle=-true_angle;
+        p1_x=-14*cos(true_angle)+28*sin(true_angle);
+        p1_y=14*sin(true_angle)+28*cos(true_angle);
+        p2_x=14*cos(true_angle)+28*sin(true_angle);
+        p2_y=-14*sin(true_angle)+28*cos(true_angle);
+        p3_x=14*cos(true_angle)-28*sin(true_angle);
+        p3_y=-14*sin(true_angle)-28*cos(true_angle);
+        p4_x=-14*cos(true_angle)-28*sin(true_angle);
+        p4_y=14*sin(true_angle)-28*cos(true_angle);
+    }
+    //////////////// END visualize true_angle
+
+    /////////////////// draw groundtruth data
+    printf("draw groundtruth data\n");
+    if (true_toMarking_LL>-9 && true_toMarking_RR>9) {     // right lane
+
+        if (true_toMarking_M<2 && true_toMarking_R>6)
+            car_pos=int((198-(true_toMarking_ML+true_toMarking_MR)*6+222-true_toMarking_M*12)/2);
+        else if (true_toMarking_M<2 && true_toMarking_R<6)
+            car_pos=int((198-(true_toMarking_ML+true_toMarking_MR)*6+174-true_toMarking_M*12)/2);
+        else
+            car_pos=int(198-(true_toMarking_ML+true_toMarking_MR)*6);
+
+        true_goto_lane=2;
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);
+            cvFillConvexPoly(semanticRGB,pt,4,cvScalar(0,0,255));
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,0,255),-1);
+
+        if (true_dist_LL<60)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-true_dist_LL*12-28),cvPoint(150+14,600-true_dist_LL*12+28),cvScalar(0,255,255),-1);
+        if (true_dist_MM<60)
+            cvRectangle(semanticRGB,cvPoint(198-14,600-true_dist_MM*12-28),cvPoint(198+14,600-true_dist_MM*12+28),cvScalar(0,255,255),-1);
+    }
+
+    else if (true_toMarking_RR<9 && true_toMarking_LL<-9) {   // left lane
+
+        if (true_toMarking_M<2 && true_toMarking_L<-6)
+            car_pos=int((102-(true_toMarking_ML+true_toMarking_MR)*6+78-true_toMarking_M*12)/2);
+        else if (true_toMarking_M<2 && true_toMarking_L>-6)
+            car_pos=int((102-(true_toMarking_ML+true_toMarking_MR)*6+126-true_toMarking_M*12)/2);
+        else
+            car_pos=int(102-(true_toMarking_ML+true_toMarking_MR)*6);
+
+        true_goto_lane=1;
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);
+            cvFillConvexPoly(semanticRGB,pt,4,cvScalar(0,0,255));
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,0,255),-1);
+
+        if (true_dist_MM<60)
+            cvRectangle(semanticRGB,cvPoint(102-14,600-true_dist_MM*12-28),cvPoint(102+14,600-true_dist_MM*12+28),cvScalar(0,255,255),-1);
+        if (true_dist_RR<60)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-true_dist_RR*12-28),cvPoint(150+14,600-true_dist_RR*12+28),cvScalar(0,255,255),-1);
+    }
+
+    else if (true_toMarking_RR<9 && true_toMarking_LL>-9) {   // central lane
+
+        if (true_toMarking_M<2) {
+            if (true_toMarking_ML+true_toMarking_MR>0)
+                car_pos=int((150-(true_toMarking_ML+true_toMarking_MR)*6+126-true_toMarking_M*12)/2);
+            else
+                car_pos=int((150-(true_toMarking_ML+true_toMarking_MR)*6+174-true_toMarking_M*12)/2);
+        } else
+            car_pos=int(150-(true_toMarking_ML+true_toMarking_MR)*6);
+
+        if (true_toMarking_ML+true_toMarking_MR>0) true_goto_lane=1;
+        else true_goto_lane=2;
+
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);
+            cvFillConvexPoly(semanticRGB,pt,4,cvScalar(0,0,255));
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,0,255),-1);
+
+        if (true_dist_LL<60)
+            cvRectangle(semanticRGB,cvPoint(102-14,600-true_dist_LL*12-28),cvPoint(102+14,600-true_dist_LL*12+28),cvScalar(0,255,255),-1);
+        if (true_dist_MM<60)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-true_dist_MM*12-28),cvPoint(150+14,600-true_dist_MM*12+28),cvScalar(0,255,255),-1);
+        if (true_dist_RR<60)
+            cvRectangle(semanticRGB,cvPoint(198-14,600-true_dist_RR*12-28),cvPoint(198+14,600-true_dist_RR*12+28),cvScalar(0,255,255),-1);
+    }
+
+    else if (true_toMarking_M<3) {  // on lane marking
+
+        if (true_toMarking_L<-6) {   // left
+            car_pos=int(78-true_toMarking_M*12);
+            if (true_dist_R<60)
+                cvRectangle(semanticRGB,cvPoint(102-14,600-true_dist_R*12-28),cvPoint(102+14,600-true_dist_R*12+28),cvScalar(0,255,255),-1);
+        } else if (true_toMarking_R>6) {  // right
+            car_pos=int(222-true_toMarking_M*12);
+            if (true_dist_L<60)
+                cvRectangle(semanticRGB,cvPoint(198-14,600-true_dist_L*12-28),cvPoint(198+14,600-true_dist_L*12+28),cvScalar(0,255,255),-1);
+        } else if (true_goto_lane==1) {  // central L
+            car_pos=int(126-true_toMarking_M*12);
+            if (true_dist_L<60)
+                cvRectangle(semanticRGB,cvPoint(102-14,600-true_dist_L*12-28),cvPoint(102+14,600-true_dist_L*12+28),cvScalar(0,255,255),-1);
+            if (true_dist_R<60)
+                cvRectangle(semanticRGB,cvPoint(150-14,600-true_dist_R*12-28),cvPoint(150+14,600-true_dist_R*12+28),cvScalar(0,255,255),-1);
+        }  else if (true_goto_lane==2) { // central R
+            car_pos=int(174-true_toMarking_M*12);
+            if (true_dist_L<60)
+                cvRectangle(semanticRGB,cvPoint(150-14,600-true_dist_L*12-28),cvPoint(150+14,600-true_dist_L*12+28),cvScalar(0,255,255),-1);
+            if (true_dist_R<60)
+                cvRectangle(semanticRGB,cvPoint(198-14,600-true_dist_R*12-28),cvPoint(198+14,600-true_dist_R*12+28),cvScalar(0,255,255),-1);
+        }
+
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);
+            cvFillConvexPoly(semanticRGB,pt,4,cvScalar(0,0,255));
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,0,255),-1);
+    }
+    /////////////////// END draw groundtruth data
+
+    //////////////// visualize angle
+    printf("visualize angle\n");
+    
+    if (visualize_angle==1) {
+        angle=-angle;
+        p1_x=-14*cos(angle)+28*sin(angle);
+        p1_y=14*sin(angle)+28*cos(angle);
+        p2_x=14*cos(angle)+28*sin(angle);
+        p2_y=-14*sin(angle)+28*cos(angle);
+        p3_x=14*cos(angle)-28*sin(angle);
+        p3_y=-14*sin(angle)-28*cos(angle);
+        p4_x=-14*cos(angle)-28*sin(angle);
+        p4_y=14*sin(angle)-28*cos(angle);
+    }
+    //////////////// END visualize angle
+
+    /////////////////// draw sensing data
+    printf("draw sensing data\n");            
+    if (toMarking_LL>-8 && toMarking_RR>8 && -toMarking_ML+toMarking_MR<5.5) {     // right lane
+
+        if (toMarking_M<1.5 && toMarking_R>6)
+            car_pos=int((198-(toMarking_ML+toMarking_MR)*6+222-toMarking_M*12)/2);
+        else if (toMarking_M<1.5 && toMarking_R<=6)
+            car_pos=int((198-(toMarking_ML+toMarking_MR)*6+174-toMarking_M*12)/2);
+        else
+            car_pos=int(198-(toMarking_ML+toMarking_MR)*6);
+
+        goto_lane=2;
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);
+            int npts=4;
+            cvPolyLine(semanticRGB,&pt,&npts,1,1,cvScalar(0,255,0),2,CV_AA);  
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,255,0),2);
+
+        if (dist_LL<50)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-dist_LL*12-28),cvPoint(150+14,600-dist_LL*12+28),cvScalar(237,99,157),2);
+        if (dist_MM<50)
+            cvRectangle(semanticRGB,cvPoint(198-14,600-dist_MM*12-28),cvPoint(198+14,600-dist_MM*12+28),cvScalar(237,99,157),2);
+    }
+
+    else if (toMarking_RR<8 && toMarking_LL<-8 && -toMarking_ML+toMarking_MR<5.5) {   // left lane
+
+        if (toMarking_M<1.5 && toMarking_L<-6)
+            car_pos=int((102-(toMarking_ML+toMarking_MR)*6+78-toMarking_M*12)/2);
+        else if (toMarking_M<1.5 && toMarking_L>=-6)
+            car_pos=int((102-(toMarking_ML+toMarking_MR)*6+126-toMarking_M*12)/2);
+        else
+            car_pos=int(102-(toMarking_ML+toMarking_MR)*6);
+
+        goto_lane=1;
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);  
+            int npts=4;
+            cvPolyLine(semanticRGB,&pt,&npts,1,1,cvScalar(0,255,0),2,CV_AA);
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,255,0),2);
+
+        if (dist_MM<50)
+            cvRectangle(semanticRGB,cvPoint(102-14,600-dist_MM*12-28),cvPoint(102+14,600-dist_MM*12+28),cvScalar(237,99,157),2);
+        if (dist_RR<50)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-dist_RR*12-28),cvPoint(150+14,600-dist_RR*12+28),cvScalar(237,99,157),2);
+    }
+
+    else if (toMarking_RR<8 && toMarking_LL>-8 && -toMarking_ML+toMarking_MR<5.5) {   // central lane
+
+        if (toMarking_M<1.5) {
+            if (toMarking_ML+toMarking_MR>0)
+                car_pos=int((150-(toMarking_ML+toMarking_MR)*6+126-toMarking_M*12)/2);
+            else
+                car_pos=int((150-(toMarking_ML+toMarking_MR)*6+174-toMarking_M*12)/2);
+        } else
+            car_pos=int(150-(toMarking_ML+toMarking_MR)*6);
+
+        if (toMarking_ML+toMarking_MR>0) goto_lane=1;
+        else goto_lane=2;
+
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);  
+            int npts=4;
+            cvPolyLine(semanticRGB,&pt,&npts,1,1,cvScalar(0,255,0),2,CV_AA);
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,255,0),2);
+
+        if (dist_LL<50)
+            cvRectangle(semanticRGB,cvPoint(102-14,600-dist_LL*12-28),cvPoint(102+14,600-dist_LL*12+28),cvScalar(237,99,157),2);
+        if (dist_MM<50)
+            cvRectangle(semanticRGB,cvPoint(150-14,600-dist_MM*12-28),cvPoint(150+14,600-dist_MM*12+28),cvScalar(237,99,157),2);
+        if (dist_RR<50)
+            cvRectangle(semanticRGB,cvPoint(198-14,600-dist_RR*12-28),cvPoint(198+14,600-dist_RR*12+28),cvScalar(237,99,157),2);
+    }
+
+    else if (toMarking_M<2.5) {  // on lane marking
+
+        if (toMarking_L<-6) {   // left
+            car_pos=int(78-toMarking_M*12);
+            if (dist_R<50)
+                cvRectangle(semanticRGB,cvPoint(102-14,600-dist_R*12-28),cvPoint(102+14,600-dist_R*12+28),cvScalar(237,99,157),2);
+        } else if (toMarking_R>6) {  // right
+            car_pos=int(222-toMarking_M*12);
+            if (dist_L<50)
+                cvRectangle(semanticRGB,cvPoint(198-14,600-dist_L*12-28),cvPoint(198+14,600-dist_L*12+28),cvScalar(237,99,157),2);
+        } else if (goto_lane==1) {  // central L
+            car_pos=int(126-toMarking_M*12);
+            if (dist_L<50)
+                cvRectangle(semanticRGB,cvPoint(102-14,600-dist_L*12-28),cvPoint(102+14,600-dist_L*12+28),cvScalar(237,99,157),2);
+            if (dist_R<50)
+                cvRectangle(semanticRGB,cvPoint(150-14,600-dist_R*12-28),cvPoint(150+14,600-dist_R*12+28),cvScalar(237,99,157),2);
+        }  else if (goto_lane==2) { // central R
+            car_pos=int(174-toMarking_M*12);
+            if (dist_L<50)
+                cvRectangle(semanticRGB,cvPoint(150-14,600-dist_L*12-28),cvPoint(150+14,600-dist_L*12+28),cvScalar(237,99,157),2);
+            if (dist_R<50)
+                cvRectangle(semanticRGB,cvPoint(198-14,600-dist_R*12-28),cvPoint(198+14,600-dist_R*12+28),cvScalar(237,99,157),2);
+        }
+
+        if (visualize_angle==1) {
+            pt[0] = cvPoint(p1_x+car_pos,p1_y+600);  
+            pt[1] = cvPoint(p2_x+car_pos,p2_y+600);
+            pt[2] = cvPoint(p3_x+car_pos,p3_y+600); 
+            pt[3] = cvPoint(p4_x+car_pos,p4_y+600);  
+            int npts=4;
+            cvPolyLine(semanticRGB,&pt,&npts,1,1,cvScalar(0,255,0),2,CV_AA);
+        } else
+            cvRectangle(semanticRGB,cvPoint(car_pos-14,600-28),cvPoint(car_pos+14,600+28),cvScalar(0,255,0),2);
+    }
+    /////////////////// END draw sensing data
+
+    if ((shared->control==0) || (manual==1)) {
+        for (int h = 0; h < semantic_height; h++) {
+            for (int w = 0; w < semantic_width; w++) {
+                semanticRGB->imageData[(h*semantic_width+w)*3+1]=0;
+                semanticRGB->imageData[(h*semantic_width+w)*3+0]=0;
+            }
+        }
+    }
+
+    cvShowImage("Semantic Visualization",semanticRGB);
+    ///////////////////////////// END semantic visualization
+}
 
 static void controller(double *indicators) {
     double angle=indicators[14];
@@ -534,6 +935,8 @@ static void controller(double *indicators) {
     printf("coe_steer:%.1lf, lane_change:%d, steer:%.2lf, d_speed:%d, speed:%d, l_clear:%d, r_clear:%d, timer_set:%d\n\n", coe_steer, lane_change, shared->steerCmd, int(desired_speed*3.6), int(shared->speed*3.6), left_clear, right_clear, timer_set);
     fflush(stdout);
     //////////////////////////////////////////////// END a controller processes the cnn output and get the optimal steering, acceleration/brake
+
+    updateVisualizations(indicators);
 }
 
 /////////////////////
@@ -606,6 +1009,11 @@ static PyObject * setupOpencv_py(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
+static PyObject * closeOpencv_py(PyObject *self, PyObject *args) {
+    closeOpencv();
+    Py_RETURN_NONE;
+}
+
 static PyObject * readImage_py(PyObject *self, PyObject *args) {
     uint8_t *imageData = readImage();
     size_t imageSize = resize_height*resize_width*3;
@@ -629,7 +1037,7 @@ static PyObject * readIndicators_py(PyObject *self, PyObject *args) {
 static PyObject * controller_py(PyObject *self, PyObject *args) {
     PyObject *pyList;
     double *indicators = (double *) calloc(INDICATORS_SIZE, sizeof(double));
-    if (!PyArg_ParseTuple(args, "O", &pyList)) return NULL; // Warning. TODO: any prob?
+    if (!PyArg_ParseTuple(args, "O", &pyList)) return NULL; // O (object) [PyObject *]
     for(Py_ssize_t i = 0; i < INDICATORS_SIZE; i++) {
         double d = PyFloat_AsDouble(PyList_GetItem(pyList, i)); // Returns -1.0 on error. Use PyErr_Occurred() to disambiguate.
         if (PyErr_Occurred()) return NULL;
@@ -637,6 +1045,14 @@ static PyObject * controller_py(PyObject *self, PyObject *args) {
     }
     controller(indicators);
     free(indicators);
+    Py_RETURN_NONE;
+}
+
+static PyObject * waitKey_py(PyObject *self, PyObject *args) {
+    int delay; // in milliseconds
+    if (!PyArg_ParseTuple(args, "i", &delay)) return NULL;
+    int key=cvWaitKey(delay);
+    printf("key %d\n", key);
     Py_RETURN_NONE;
 }
 
@@ -686,6 +1102,10 @@ static struct PyMethodDef drive_mets[] = {
         "Setup opencv."
     },
     {
+        "close_opencv", closeOpencv_py, METH_VARARGS,
+        "Close opencv."
+    },
+    {
         "read_image", readImage_py, METH_VARARGS,
         "Read image from shared memory."
     },
@@ -696,6 +1116,10 @@ static struct PyMethodDef drive_mets[] = {
     {
         "controller", controller_py, METH_VARARGS,
         "Outputs control commands given indicators"
+    },
+    {
+        "wait_key", waitKey_py, METH_VARARGS,
+        "Opencv waits `delay` milliseconds for a key. Needed for actually showing images."
     },
 	{NULL, NULL, 0, NULL} /* Sentinel */
 };

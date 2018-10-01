@@ -6,6 +6,7 @@ import numpy as np
 # Test 1
 # drive.test_shared_memory()
 
+
 # Test 2
 # drive.setup_shared_memory()
 # while True:
@@ -18,14 +19,15 @@ import numpy as np
 #     elif inp == 'w':
 #         drive.write(not written)
 
-# Test 3
-@contextmanager
-def shared_memory(*args, **kwds):
-    drive.setup_shared_memory()
-    try:
-        yield None
-    finally:
-        drive.close_shared_memory()
+
+# # Test 3
+# @contextmanager
+# def shared_memory(*args, **kwds):
+#     drive.setup_shared_memory()
+#     try:
+#         yield None
+#     finally:
+#         drive.close_shared_memory()
 
 # with shared_memory() as _:
 #     while True:
@@ -36,6 +38,7 @@ def shared_memory(*args, **kwds):
 #             break
 #         elif inp == 'w':
 #             drive.write(not written)
+
 
 # Test 4
 # with shared_memory() as _:
@@ -52,25 +55,9 @@ def shared_memory(*args, **kwds):
 #             drive.write(not written)
 
 
-        # if drive.is_written():
-        #     print('reading img')
-        #     img = drive.read_image()
-        #     print(img)
-
-        # if drive.is_written():
-        #     print('wut')
-        #     input()
-        #     #img = drive.read_shared_memory()
-        #     #print(img)
-
-            # img, ground_truth = drive.read_shared_memory()
-            # drive_commands = drive.controller(ground_truth)
-            # drive.write_commands()
-
-WIDTH = 280
-HEIGHT = 210
-
-# Test 5
+# # Test 5
+# WIDTH = 280
+# HEIGHT = 210
 # with shared_memory() as _:
 #     drive.setup_opencv()
 #     while True:
@@ -88,6 +75,7 @@ HEIGHT = 210
 #             plt.show()
 #             drive.write(False) # needs to do this so torcs continues and writes again
 
+
 # # Test 6: read_indicators
 # with shared_memory() as _:
 #     drive.setup_opencv()
@@ -101,7 +89,33 @@ HEIGHT = 210
 #             drive.write(False)
 
 
-# Test 7: controller
+# # Test 7: controller
+# with shared_memory() as _:
+#     drive.setup_opencv()
+#     drive.pause(False) # TORCS may share images and ground truth
+#     print("Controlling: ", drive.is_controlling())
+#     drive.set_control(True)
+#     print("Controlling: ", drive.is_controlling())
+#     input("Press key to start...")
+#     while True:
+#         if drive.is_written():
+#             ground_truth = drive.read_indicators()
+#             print(ground_truth)
+#             drive.controller(ground_truth)
+#             drive.write(False) # Shared data read, and TORCS may continue
+
+
+# Test 8: visualization
+@contextmanager
+def shared_memory(*args, **kwds):
+    drive.setup_shared_memory()
+    drive.setup_opencv()
+    try:
+        yield None
+    finally:
+        drive.close_shared_memory()
+        drive.close_opencv()
+
 with shared_memory() as _:
     drive.setup_opencv()
     drive.pause(False) # TORCS may share images and ground truth
@@ -115,3 +129,4 @@ with shared_memory() as _:
             print(ground_truth)
             drive.controller(ground_truth)
             drive.write(False) # Shared data read, and TORCS may continue
+            drive.wait_key(1)
