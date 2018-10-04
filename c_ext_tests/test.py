@@ -107,7 +107,7 @@ import numpy as np
 
 # Test 8: visualization
 @contextmanager
-def shared_memory(*args, **kwds):
+def context(*args, **kwds):
     drive.setup_shared_memory()
     drive.setup_opencv()
     try:
@@ -116,7 +116,7 @@ def shared_memory(*args, **kwds):
         drive.close_shared_memory()
         drive.close_opencv()
 
-with shared_memory() as _:
+with context() as _:
     drive.setup_opencv()
     drive.pause(False) # TORCS may share images and ground truth
     print("Controlling: ", drive.is_controlling())
