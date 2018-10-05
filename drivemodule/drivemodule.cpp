@@ -253,28 +253,33 @@ static int closeSharedMemory() {
 }
 
 static bool isWritten() {
-    return shared->written;
+    return (bool) shared->written;
 }
 
-static void writeShared(bool written) {
+static void writeShared(int written) {
     shared->written = written;
 }
 
 // The pause flag means it is paused on 0 (falsy value), going against intuition
 static bool isPaused() {
-    return !shared->pause;
+    return !((bool) shared->pause);
 }
 
 // The pause flag means it is paused on 0 (falsy value), going against intuition
-static void pauseDrive(bool pause) {
-    shared->pause = !pause;
+static void pauseDrive(int pause) {
+    if(pause == 0){
+        shared->pause = 1;
+    } else {
+        shared->pause = 0;
+    }
+    //shared->pause = !pause;
 }
 
 static bool isControlling() {
-    return shared->control;
+    return (bool) shared->control;
 }
 
-static void setControl(bool control) {
+static void setControl(int control) {
     shared->control = control;
 }
 
@@ -959,10 +964,9 @@ static PyObject * isWritten_py(PyObject *self, PyObject *args) {
 }
 
 static PyObject * write_py(PyObject *self, PyObject *args) {
-    bool written;
-    if (!PyArg_ParseTuple(args, "p", &written)) return NULL;
-    writeShared(written);
-    //return Py_None;
+    int i;
+    if (!PyArg_ParseTuple(args, "p", &i)) return NULL; // p (bool) [int]
+    writeShared(i);
     Py_RETURN_NONE;
 }
 
@@ -974,9 +978,9 @@ static PyObject * isPaused_py(PyObject *self, PyObject *args) {
 }
 
 static PyObject * pause_py(PyObject *self, PyObject *args) {
-    bool pause;
-    if (!PyArg_ParseTuple(args, "p", &pause)) return NULL;
-    pauseDrive(pause);
+    int i;
+    if (!PyArg_ParseTuple(args, "p", &i)) return NULL; // p (bool) [int]
+    pauseDrive(i);
     Py_RETURN_NONE;
 }
 
@@ -988,9 +992,9 @@ static PyObject * isControlling_py(PyObject *self, PyObject *args) {
 }
 
 static PyObject * setControl_py(PyObject *self, PyObject *args) {
-    bool control;
-    if (!PyArg_ParseTuple(args, "p", &control)) return NULL;
-    setControl(control);
+    int i;
+    if (!PyArg_ParseTuple(args, "p", &i)) return NULL; // p (bool) [int]
+    setControl(i);
     Py_RETURN_NONE;
 }
 

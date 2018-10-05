@@ -1,7 +1,7 @@
 import drive
 from contextlib import contextmanager
-import matplotlib.pyplot as plt
-import numpy as np
+#import matplotlib.pyplot as plt
+#import numpy as np
 
 # Test 1
 # drive.test_shared_memory()
@@ -117,7 +117,6 @@ def context(*args, **kwds):
         drive.close_opencv()
 
 with context() as _:
-    drive.setup_opencv()
     drive.pause(False) # TORCS may share images and ground truth
     print("Controlling: ", drive.is_controlling())
     drive.set_control(True)
