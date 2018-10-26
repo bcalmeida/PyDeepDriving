@@ -86,8 +86,9 @@ class CNNtoRNNFeedback(nn.Module):
         self.c = repackage_hidden(self.c)
         
         # y shape (seq_len*bs, output_size)
-        self.last_pred = self.linear(output)
-        return self.last_pred
-    
+        pred = self.linear(output)
+        self.last_pred = Variable(pred.data, requires_grad=False)
+        return pred
+
     def reset(self):
         self.h, self.c = self.init_hidden()
