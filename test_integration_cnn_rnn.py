@@ -52,8 +52,8 @@ df_small_val) = setup_dataset_dfs(LABELS_CSV, LABELS_BASELINE_CSV)
 # More settings
 arch = resnet34
 sz=210
-tfms = tfms_from_model(arch, sz, crop_type=CropType.NO)
-trn_tfms, val_tfms = tfms
+trn_tfms, _ = tfms_from_model(arch, sz, crop_type=CropType.NO)
+trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
 
 # Training settings
 bs = 1
@@ -73,7 +73,6 @@ layer_groups = [
     list(model.encoder.children())[6:],
     [model.lstm, model.linear],
 ]
-model.eval()
 
 # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
 opt_fn = partial(optim.SGD, momentum=0.9)
@@ -97,7 +96,7 @@ learner.clip = 0.4
 ############ Model loading
 ############
 
-learner.load('nb23-sgd-bs14-7frz-21unfrz')
+learner.load('nb25-sz210-pre-B')
 learner.model.eval()
 
 # print_calced_metrics_from_dl(learner.model, val_dl)
