@@ -96,7 +96,8 @@ learner.clip = 0.4
 ############ Model loading
 ############
 
-learner.load('nb25-sz210-pre-B')
+# learner.load('nb25-sz210-pre-B')
+learner.load('nb26-sz210-c')
 learner.model.eval()
 
 # print_calced_metrics_from_dl(learner.model, val_dl)
@@ -206,7 +207,7 @@ with context() as _:
             ground_truth = drive.read_indicators()
             print("ground_truth", ground_truth)
 
-            drive.controller(ground_truth)
+            drive.controller(indicators_formatted)
             drive.update_visualizations(indicators_formatted, ground_truth)
             drive.write(False) # Shared data read, and TORCS may continue
             drive.wait_key(1)

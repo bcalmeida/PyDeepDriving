@@ -605,7 +605,7 @@ with context() as _:
             ground_truth = drive.read_indicators()
             print("ground_truth", ground_truth)
 
-            drive.controller(ground_truth)
+            drive.controller(indicators_formatted)
             drive.update_visualizations(indicators_formatted, ground_truth)
             drive.write(False) # Shared data read, and TORCS may continue
             drive.wait_key(1)
