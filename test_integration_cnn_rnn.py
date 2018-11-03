@@ -15,7 +15,7 @@ from drivenet.data_handlers import LinearFeedbackDataset
 from drivenet.cnn_rnn_net import CNNtoRNNFeedback
 from drivenet.ds_creation import setup_dataset_dfs
 from drivenet.fastaiwrap import CustomModel, MockedData
-from drivenet.metrics import METRICS
+from drivenet.metrics import METRICS, calc_all_metrics, print_calced_metrics
 from drivenet.predict import print_calced_metrics_from_dl
 from drivenet.utils import transform_range_output, INDIC_RANGES, UNIT_RANGES
 
@@ -108,61 +108,70 @@ learner.model.eval()
 
 # import pdb; pdb.set_trace()
 
-def format_indicators(pred_indicators):
-    """
-    Indicators are formatted differently on the controller
-    Cpp controller:
-    indicators[0]  = shared->fast;
-    indicators[1]  = shared->dist_L;
-    indicators[2]  = shared->dist_R;
-    indicators[3]  = shared->toMarking_L;
-    indicators[4]  = shared->toMarking_M;
-    indicators[5]  = shared->toMarking_R;
-    indicators[6]  = shared->dist_LL;
-    indicators[7]  = shared->dist_MM;
-    indicators[8]  = shared->dist_RR;
-    indicators[9]  = shared->toMarking_LL;
-    indicators[10] = shared->toMarking_ML;
-    indicators[11] = shared->toMarking_MR;
-    indicators[12] = shared->toMarking_RR;
-    indicators[13] = shared->toMiddle;
-    indicators[14] = shared->angle;
-    indicators[15] = shared->speed;
+"""
+Indicators are formatted differently on the controller
+Cpp controller:
+indicators[0]  = shared->fast;
+indicators[1]  = shared->dist_L;
+indicators[2]  = shared->dist_R;
+indicators[3]  = shared->toMarking_L;
+indicators[4]  = shared->toMarking_M;
+indicators[5]  = shared->toMarking_R;
+indicators[6]  = shared->dist_LL;
+indicators[7]  = shared->dist_MM;
+indicators[8]  = shared->dist_RR;
+indicators[9]  = shared->toMarking_LL;
+indicators[10] = shared->toMarking_ML;
+indicators[11] = shared->toMarking_MR;
+indicators[12] = shared->toMarking_RR;
+indicators[13] = shared->toMiddle;
+indicators[14] = shared->angle;
+indicators[15] = shared->speed;
 
-    Python network:
-    def mae_angle(preds, y):  return mae_idx(preds, y, 0)
-    def mae_toM_L(preds, y):  return mae_idx(preds, y, 1)
-    def mae_toM_M(preds, y):  return mae_idx(preds, y, 2)
-    def mae_toM_R(preds, y):  return mae_idx(preds, y, 3)
-    def mae_d_L(preds, y):    return mae_idx(preds, y, 4)
-    def mae_d_R(preds, y):    return mae_idx(preds, y, 5)
-    def mae_toM_LL(preds, y): return mae_idx(preds, y, 6)
-    def mae_toM_ML(preds, y): return mae_idx(preds, y, 7)
-    def mae_toM_MR(preds, y): return mae_idx(preds, y, 8)
-    def mae_toM_RR(preds, y): return mae_idx(preds, y, 9)
-    def mae_d_LL(preds, y):   return mae_idx(preds, y, 10)
-    def mae_d_MM(preds, y):   return mae_idx(preds, y, 11)
-    def mae_d_RR(preds, y):   return mae_idx(preds, y, 12)
-    def mae_fast(preds, y):   return mae_idx(preds, y, 13)
-    """
-    indicators_formatted = [0] * 16
-    indicators_formatted[0]  = pred_indicators[13] # fast
-    indicators_formatted[1]  = pred_indicators[4]  # dist_L
-    indicators_formatted[2]  = pred_indicators[5]  # dist_R
-    indicators_formatted[3]  = pred_indicators[1]  # toMarking_L
-    indicators_formatted[4]  = pred_indicators[2]  # toMarking_M
-    indicators_formatted[5]  = pred_indicators[3]  # toMarking_R
-    indicators_formatted[6]  = pred_indicators[10] # dist_LL
-    indicators_formatted[7]  = pred_indicators[11] # dist_MM
-    indicators_formatted[8]  = pred_indicators[12] # dist_RR
-    indicators_formatted[9]  = pred_indicators[6]  # toMarking_LL
-    indicators_formatted[10] = pred_indicators[7]  # toMarking_ML
-    indicators_formatted[11] = pred_indicators[8]  # toMarking_MR
-    indicators_formatted[12] = pred_indicators[9]  # toMarking_RR
-    indicators_formatted[13] = 0
-    indicators_formatted[14] = pred_indicators[0] # angle
-    indicators_formatted[15] = 0
-    return indicators_formatted
+Python network:
+def mae_angle(preds, y):  return mae_idx(preds, y, 0)
+def mae_toM_L(preds, y):  return mae_idx(preds, y, 1)
+def mae_toM_M(preds, y):  return mae_idx(preds, y, 2)
+def mae_toM_R(preds, y):  return mae_idx(preds, y, 3)
+def mae_d_L(preds, y):    return mae_idx(preds, y, 4)
+def mae_d_R(preds, y):    return mae_idx(preds, y, 5)
+def mae_toM_LL(preds, y): return mae_idx(preds, y, 6)
+def mae_toM_ML(preds, y): return mae_idx(preds, y, 7)
+def mae_toM_MR(preds, y): return mae_idx(preds, y, 8)
+def mae_toM_RR(preds, y): return mae_idx(preds, y, 9)
+def mae_d_LL(preds, y):   return mae_idx(preds, y, 10)
+def mae_d_MM(preds, y):   return mae_idx(preds, y, 11)
+def mae_d_RR(preds, y):   return mae_idx(preds, y, 12)
+def mae_fast(preds, y):   return mae_idx(preds, y, 13)
+"""
+INDS_CNTRL_NET_MAPPINGS = [
+    [0, 13],
+    [1, 4],
+    [2, 5],
+    [3, 1],
+    [4, 2],
+    [5, 3],
+    [6, 10],
+    [7, 11],
+    [8, 12],
+    [9, 6],
+    [10, 7],
+    [11, 8],
+    [12, 9],
+    [14, 0],
+]
+
+def inds_net_to_cntrl(inds_net):
+    inds_cntrl = [0] * 16
+    for a,b in INDS_CNTRL_NET_MAPPINGS:
+        inds_cntrl[a] = inds_net[b]
+    return inds_cntrl
+
+def inds_ctrl_to_net(inds_cntrl):
+    inds_net = [0] * 14
+    for a,b in INDS_CNTRL_NET_MAPPINGS:
+        inds_net[b] = inds_cntrl[a]
+    return inds_net
 
 @contextmanager
 def context(*args, **kwds):
@@ -174,7 +183,6 @@ def context(*args, **kwds):
         drive.close_shared_memory()
         drive.close_opencv()
 
-
 WIDTH = 280
 HEIGHT = 210
 with context() as _:
@@ -183,6 +191,15 @@ with context() as _:
     drive.set_control(True)
     print("Controlling: ", drive.is_controlling())
     input("Press key to start...")
+
+    ### metrics
+    i = 0
+    total_mets_unit = np.zeros(len(METRICS))
+    total_mets_indic = np.zeros(len(METRICS))
+    # total_mae_unit = 0
+    # total_mae_indic = 0
+    ### metrics
+
     while True:
         if drive.is_written():
             print("Reading img")
@@ -201,7 +218,7 @@ with context() as _:
             print("network raw output", output)
             print("pred_indicators", pred_indicators)
 
-            indicators_formatted = format_indicators(pred_indicators)
+            indicators_formatted = inds_net_to_cntrl(pred_indicators)
             print("indicators_formatted", indicators_formatted)
 
             ground_truth = drive.read_indicators()
@@ -209,5 +226,32 @@ with context() as _:
 
             drive.controller(indicators_formatted)
             drive.update_visualizations(indicators_formatted, ground_truth)
+            
+            ########################################################
+            ############################ metrics
+            ########################################################
+            inds_netfmt_unitrng = to_np(output[0])
+            inds_netfmt_indicrng = transform_range_output(inds_netfmt_unitrng, UNIT_RANGES, INDIC_RANGES)
+
+            gtruth_netfmt_indicrng = inds_ctrl_to_net(ground_truth)
+            gtruth_netfmt_unitrng = transform_range_output(gtruth_netfmt_indicrng, INDIC_RANGES, UNIT_RANGES)
+
+            mets_unit = calc_all_metrics([inds_netfmt_unitrng], [gtruth_netfmt_unitrng])
+            mets_indic = calc_all_metrics([inds_netfmt_indicrng], [gtruth_netfmt_indicrng])
+
+            total_mets_unit += mets_unit
+            total_mets_indic += mets_indic
+
+            i += 1
+            avg_mets_unit = total_mets_unit / i
+            avg_mets_indic = total_mets_indic / i
+
+            print("frame mae: unit: %.4f, indic: %.4f" % (mets_unit[1], mets_indic[1]))
+            print("avg mae: unit: %.4f, indic: %.4f" % (avg_mets_unit[1], avg_mets_indic[1]))
+
+            ########################################################
+            ########################################################
+            ########################################################
+
             drive.write(False) # Shared data read, and TORCS may continue
             drive.wait_key(1)
