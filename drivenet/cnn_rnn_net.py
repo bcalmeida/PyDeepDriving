@@ -38,6 +38,16 @@ class CNNtoRNNFeedback(nn.Module):
         for param in self.encoder.parameters():
             param.requires_grad = False
         set_trainable(self.encoder, False) # fastai fit bug
+
+        self.encoder_linear = nn.Sequential(
+            nn.BatchNorm1d(1024),
+            nn.Dropout(p=0.25),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, encode_size)).cuda()
+        set_trainable(self.encoder_linear, True) # fastai fit bug
         
         self.lstm = nn.LSTM(encode_size+output_size, hidden_size, num_layers).cuda()
         self.h, self.c = self.init_hidden()
@@ -53,12 +63,18 @@ class CNNtoRNNFeedback(nn.Module):
         
     # added nb-23
     def init_weights(self):
+        # self.encoder_linear
+        apply_init(self.encoder_linear, nn.init.kaiming_normal)
+        
+        # self.lstm
         for layer_weights in self.lstm.all_weights:
             weight_ih, weight_hh, bias_ih, bias_hh = layer_weights
             nn.init.xavier_normal(weight_ih)
             nn.init.xavier_normal(weight_hh)
             bias_ih.data.fill_(0.)
             bias_hh.data.fill_(0.)
+        
+        # self.linear
         apply_init(self.linear, nn.init.kaiming_normal)
         
     def init_hidden(self):
@@ -74,7 +90,7 @@ class CNNtoRNNFeedback(nn.Module):
         else:
             y_context = self.last_pred
         
-        encodes = self.encoder(x) # shape (seq_len*bs, 1024)
+        encodes = self.encoder_linear(self.encoder(x)) # shape (seq_len*bs, 1024) -> (seq_len*bs, encode_size)
         encodes_and_context = torch.cat((encodes, y_context), dim=1) # shape (seq_len*bs, encode_size+output_size)
         encodes_and_context = encodes_and_context.view(-1, self.bs, self.encode_size+self.output_size) # shape (seq_len', bs, enc+out)
         
