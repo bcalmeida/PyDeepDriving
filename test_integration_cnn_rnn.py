@@ -1,4 +1,5 @@
 import os
+import csv
 from contextlib import contextmanager
 from functools import partial
 import numpy as np
@@ -222,20 +223,25 @@ def inds_ctrl_to_net(inds_cntrl):
 def context(*args, **kwds):
     drive.setup_shared_memory()
     drive.setup_opencv()
+    driving_log = open('driving_log.txt', 'a')
     try:
-        yield None
+        yield driving_log
     finally:
         drive.close_shared_memory()
         drive.close_opencv()
+        driving_log.close()
 
 WIDTH = 280
 HEIGHT = 210
-with context() as _:
+with context() as driving_log:
     drive.pause(False) # TORCS may share images and ground truth
     print("Controlling: ", drive.is_controlling())
     drive.set_control(True)
     print("Controlling: ", drive.is_controlling())
     input("Press key to start...")
+
+    driving_log.write('=========\n')
+    wr = csv.writer(driving_log)#, quoting=csv.QUOTE_ALL)
 
     ### metrics
     i = 0
@@ -297,6 +303,13 @@ with context() as _:
             ########################################################
             ########################################################
             ########################################################
+
+
+            ### LOGGING ###
+            speed = ground_truth[15]
+            toMiddle = ground_truth[13]
+            wr.writerow([speed, toMiddle] + inds_netfmt_indicrng + gtruth_netfmt_indicrng)
+            ###############
 
             drive.write(False) # Shared data read, and TORCS may continue
             drive.wait_key(1)
