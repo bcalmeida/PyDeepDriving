@@ -14,6 +14,7 @@ import drive
 
 from drivenet.data_handlers import LinearFeedbackDataset, BatchifiedDataset
 from drivenet.cnn_rnn_net import CNNtoRNNFeedback, CNNtoRNN
+from drivenet.cnn_net import CNNtoFC
 from drivenet.ds_creation import setup_dataset_dfs
 from drivenet.fastaiwrap import CustomModel, MockedData
 from drivenet.metrics import METRICS, calc_all_metrics, print_calced_metrics
@@ -53,6 +54,86 @@ df_small_val) = setup_dataset_dfs(LABELS_CSV, LABELS_BASELINE_CSV)
 sz = 210
 trn_tfms, _ = tfms_from_model(resnet34, sz, crop_type=CropType.NO)
 trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
+
+def get_learner_cnn(model_name):
+    bs = 1
+    seq_len = 1
+
+    # Datasets and Dataloaders
+    trn_ds = BatchifiedDataset(df_large_trn, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    val_ds = BatchifiedDataset(df_large_val, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    trn_dl = FastaiDataLoader(trn_ds, batch_sampler=trn_ds.batch_sampler(shuffle=True))
+    val_dl = FastaiDataLoader(val_ds, batch_sampler=val_ds.batch_sampler())
+
+    # Model
+    model_folder = "CNNtoFC_new"
+    model = CNNtoFC()
+    layer_groups = [
+        list(model.encoder.children())[:6],
+        list(model.encoder.children())[6:],
+        [model.linear],
+    ]
+
+    # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
+    opt_fn = partial(optim.SGD, momentum=0.9)
+    criterion = F.mse_loss
+
+    learner = Learner(
+        MockedData(trn_dl, val_dl),
+        CustomModel(model, layer_groups),
+        metrics=METRICS,
+        opt_fn=opt_fn,
+        crit=criterion,
+        tmp_name=os.path.join(ROOT, PATH, 'tmp'),
+        models_name=os.path.join(ROOT, PATH, 'models', model_folder),
+    )
+    # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
+    # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
+    # learner.clip = 0.4
+
+    learner.load(model_name)
+    learner.model.eval()
+    return learner
+
+def get_learner_cnn_l1(model_name):
+    bs = 1
+    seq_len = 1
+
+    # Datasets and Dataloaders
+    trn_ds = BatchifiedDataset(df_large_trn, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    val_ds = BatchifiedDataset(df_large_val, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    trn_dl = FastaiDataLoader(trn_ds, batch_sampler=trn_ds.batch_sampler(shuffle=True))
+    val_dl = FastaiDataLoader(val_ds, batch_sampler=val_ds.batch_sampler())
+
+    # Model
+    model_folder = "CNNtoFC_l1"
+    model = CNNtoFC()
+    layer_groups = [
+        list(model.encoder.children())[:6],
+        list(model.encoder.children())[6:],
+        [model.linear],
+    ]
+
+    # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
+    opt_fn = partial(optim.SGD, momentum=0.9)
+    criterion = F.l1_loss #mse_loss
+
+    learner = Learner(
+        MockedData(trn_dl, val_dl),
+        CustomModel(model, layer_groups),
+        metrics=METRICS,
+        opt_fn=opt_fn,
+        crit=criterion,
+        tmp_name=os.path.join(ROOT, PATH, 'tmp'),
+        models_name=os.path.join(ROOT, PATH, 'models', model_folder),
+    )
+    # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
+    # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
+    # learner.clip = 0.4
+
+    learner.load(model_name)
+    learner.model.eval()
+    return learner
 
 def get_learner_rnn_feedback(model_name):
     # Training settings
@@ -140,8 +221,21 @@ def get_learner_rnn(model_name):
     learner.model.eval()
     return learner
 
+FEEDBACK = False
+
 # learner = get_learner_rnn_feedback('nb26-sz210-c')
-learner = get_learner_rnn('nb28-net2-lrg-h')
+# log_name = 'rnn_feedback.log'
+# feedback = True
+
+# learner = get_learner_rnn('nb28-net2-lrg-h') # 0.155      0.051
+# log_name = 'driving_log.txt'
+
+learner = get_learner_cnn('nb28-fc-lrg-d') # 0.153      0.060 
+log_name = 'cnn.log'
+
+# learner = get_learner_cnn_l1('nb28-fcl1-lrg-b') # 0.163      0.047
+# log_name = 'cnn_l1.log'
+
 
 ############
 ############ Model loading
@@ -229,7 +323,7 @@ def inds_ctrl_to_net(inds_cntrl):
 def context(*args, **kwds):
     drive.setup_shared_memory()
     drive.setup_opencv()
-    driving_log = open('driving_log.txt', 'a')
+    driving_log = open(log_name, 'a')
     try:
         yield driving_log
     finally:
@@ -270,7 +364,10 @@ with context() as driving_log:
             img_np = (img_np/255).astype('float32')
             x = trn_tfms(img_np)[np.newaxis, ...] # shape (210, 280, 3) -> (3, 210, 210) -> (1, 3, 210, 210)
             x = Variable(T(x),requires_grad=False, volatile=True)
-            output = learner.model(x)#, None) # shape (1, 14)
+            if FEEDBACK:
+                output = learner.model(x, None) # FEEDBACK
+            else:
+                output = learner.model(x) # shape (1, 14)
             pred_indicators = transform_range_output(to_np(output[0]), UNIT_RANGES, INDIC_RANGES)
             print("network raw output", output)
             print("pred_indicators", pred_indicators)
