@@ -82,3 +82,22 @@ class LinearFeedbackDataset(Dataset):
     def batch_sampler(self):
         # Skips first element
         return BatchSampler(range(1, len(self)), batch_size=1, drop_last=True)
+
+class LinearDataset(Dataset):
+    def __init__(self, df, transform, PATH, IMAGES_FOLDER):
+        self.data = df.values
+        self.transform = transform
+        self.PATH = PATH
+        self.IMAGES_FOLDER = IMAGES_FOLDER
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, i):
+        img_id = self.data[i][0]
+        img = open_image(os.path.join(self.PATH, self.IMAGES_FOLDER, img_id + '.png'))
+        y = self.data[i][1:].astype(np.float32)
+        return self.transform(img, y)
+
+    def batch_sampler(self):
+        return BatchSampler(SequentialSampler(self), batch_size=1, drop_last=True)
