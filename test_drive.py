@@ -50,92 +50,98 @@ df_small_val) = setup_dataset_dfs(LABELS_CSV, LABELS_BASELINE_CSV)
 # ######################
 # ###################### Network setup
 # ######################
-# # More settings
-# arch = resnet34
-# sz=210
-# trn_tfms, _ = tfms_from_model(arch, sz, crop_type=CropType.NO)
-# trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
-
-# # Training settings
-# bs = 1
-# seq_len = 1
-
-# # Datasets and Dataloaders
-# trn_lds = LinearFeedbackDataset(df_small_trn, trn_tfms, PATH, IMAGES_FOLDER)
-# val_lds = LinearFeedbackDataset(df_small_val, trn_tfms, PATH, IMAGES_FOLDER)
-# trn_dl = FastaiDataLoader(trn_lds, batch_sampler=trn_lds.batch_sampler())
-# val_dl = FastaiDataLoader(val_lds, batch_sampler=val_lds.batch_sampler())
-
-# # Model
-# model_folder = "CNNtoRNNFeedback"
-# model = CNNtoRNNFeedback(1024, 200, 2, seq_len, bs, 14, use_ground_truth=False)
-# layer_groups = [
-#     list(model.encoder.children())[:6],
-#     list(model.encoder.children())[6:],
-#     [model.lstm, model.linear],
-# ]
-
-# # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
-# opt_fn = partial(optim.SGD, momentum=0.9)
-# criterion = F.l1_loss
-
-# learner = Learner(
-#     MockedData(trn_dl, val_dl),
-#     CustomModel(model, layer_groups),
-#     metrics=METRICS,
-#     opt_fn=opt_fn,
-#     crit=criterion,
-#     tmp_name=os.path.join(ROOT, PATH, 'tmp'),
-#     models_name=os.path.join(ROOT, PATH, 'models', model_folder),
-# )
-# # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
-# # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
-# learner.clip = 0.4
-
-
-# mem comsuption: 7200 MB
 sz = 210
 trn_tfms, _ = tfms_from_model(resnet34, sz, crop_type=CropType.NO)
 trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
-bs = 1
-seq_len = 1
 
-# Datasets and Dataloaders
-trn_ds = BatchifiedDataset(df_large_trn, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
-val_ds = BatchifiedDataset(df_large_val, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
-trn_dl = FastaiDataLoader(trn_ds, batch_sampler=trn_ds.batch_sampler())
-val_dl = FastaiDataLoader(val_ds, batch_sampler=val_ds.batch_sampler())
+def get_learner_rnn_feedback(model_name):
+    # Training settings
+    bs = 1
+    seq_len = 1
 
-# Model
-model_folder = "CNNtoRNN_new"
-model = CNNtoRNN(encode_size=128, # 1024
-                  hidden_size=32,  # 200
-                  num_layers=2,
-                  bs=bs,
-                  output_size=14)
-layer_groups = [
-    list(model.encoder.children())[:6],
-    list(model.encoder.children())[6:],
-    [model.encoder_linear, model.lstm, model.linear],
-]
+    # Datasets and Dataloaders
+    trn_lds = LinearFeedbackDataset(df_small_trn, trn_tfms, PATH, IMAGES_FOLDER)
+    val_lds = LinearFeedbackDataset(df_small_val, trn_tfms, PATH, IMAGES_FOLDER)
+    trn_dl = FastaiDataLoader(trn_lds, batch_sampler=trn_lds.batch_sampler())
+    val_dl = FastaiDataLoader(val_lds, batch_sampler=val_lds.batch_sampler())
 
-# opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
-opt_fn = partial(optim.SGD, momentum=0.9)
-criterion = F.mse_loss
+    # Model
+    model_folder = "CNNtoRNNFeedback"
+    model = CNNtoRNNFeedback(1024, 200, 2, seq_len, bs, 14, use_ground_truth=False)
+    layer_groups = [
+        list(model.encoder.children())[:6],
+        list(model.encoder.children())[6:],
+        [model.lstm, model.linear],
+    ]
 
-learner = Learner(
-    MockedData(trn_dl, val_dl),
-    CustomModel(model, layer_groups),
-    metrics=METRICS,
-    opt_fn=opt_fn,
-    crit=criterion,
-    tmp_name=os.path.join(ROOT, PATH, 'tmp'),
-    models_name=os.path.join(ROOT, PATH, 'models', model_folder),
-)
-# clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
-# learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
-learner.clip = 0.4
+    # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
+    opt_fn = partial(optim.SGD, momentum=0.9)
+    criterion = F.l1_loss
 
+    learner = Learner(
+        MockedData(trn_dl, val_dl),
+        CustomModel(model, layer_groups),
+        metrics=METRICS,
+        opt_fn=opt_fn,
+        crit=criterion,
+        tmp_name=os.path.join(ROOT, PATH, 'tmp'),
+        models_name=os.path.join(ROOT, PATH, 'models', model_folder),
+    )
+    # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
+    # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
+    learner.clip = 0.4
+
+    learner.load(model_name)
+    learner.model.eval()
+    return learner
+
+def get_learner_rnn(model_name):
+    # mem comsuption: 7200 MB
+    bs = 1
+    seq_len = 1
+
+    # Datasets and Dataloaders
+    trn_ds = BatchifiedDataset(df_large_trn, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    val_ds = BatchifiedDataset(df_large_val, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+    trn_dl = FastaiDataLoader(trn_ds, batch_sampler=trn_ds.batch_sampler())
+    val_dl = FastaiDataLoader(val_ds, batch_sampler=val_ds.batch_sampler())
+
+    # Model
+    model_folder = "CNNtoRNN_new"
+    model = CNNtoRNN(encode_size=128, # 1024
+                     hidden_size=32,  # 200
+                     num_layers=2,
+                     bs=bs,
+                     output_size=14)
+    layer_groups = [
+        list(model.encoder.children())[:6],
+        list(model.encoder.children())[6:],
+        [model.encoder_linear, model.lstm, model.linear],
+    ]
+
+    # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
+    opt_fn = partial(optim.SGD, momentum=0.9)
+    criterion = F.mse_loss
+
+    learner = Learner(
+        MockedData(trn_dl, val_dl),
+        CustomModel(model, layer_groups),
+        metrics=METRICS,
+        opt_fn=opt_fn,
+        crit=criterion,
+        tmp_name=os.path.join(ROOT, PATH, 'tmp'),
+        models_name=os.path.join(ROOT, PATH, 'models', model_folder),
+    )
+    # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
+    # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
+    learner.clip = 0.4
+
+    learner.load(model_name)
+    learner.model.eval()
+    return learner
+
+# learner = get_learner_rnn_feedback('nb26-sz210-c')
+learner = get_learner_rnn('nb28-net2-lrg-h')
 
 ############
 ############ Model loading
@@ -143,8 +149,8 @@ learner.clip = 0.4
 
 # learner.load('nb25-sz210-pre-B')
 # learner.load('nb26-sz210-c')
-learner.load('nb28-net2-lrg-h')
-learner.model.eval()
+# learner.load('nb28-net2-lrg-h')
+# learner.model.eval()
 
 # print_calced_metrics_from_dl(learner.model, val_dl)
 
