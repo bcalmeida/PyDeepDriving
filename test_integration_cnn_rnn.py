@@ -11,8 +11,8 @@ from torchvision.models import resnet34
 
 import drive
 
-from drivenet.data_handlers import LinearFeedbackDataset
-from drivenet.cnn_rnn_net import CNNtoRNNFeedback
+from drivenet.data_handlers import LinearFeedbackDataset, BatchifiedDataset
+from drivenet.cnn_rnn_net import CNNtoRNNFeedback, CNNtoRNN
 from drivenet.ds_creation import setup_dataset_dfs
 from drivenet.fastaiwrap import CustomModel, MockedData
 from drivenet.metrics import METRICS, calc_all_metrics, print_calced_metrics
@@ -26,9 +26,9 @@ from fastai.core import T, to_np
 
 torch.cuda.set_device(0)
 
-# Paths
-ROOT = '/home/bcalmeida/dev/py-deep-torcs'
-PATH = "data/"
+# SSD Paths
+ROOT = '/media/ssd/datasets/deep-driving-csv/'
+PATH = "/media/ssd/datasets/deep-driving-csv/"
 IMAGES_FOLDER = "images/"
 LABELS_CSV = PATH + "labels.csv"
 IMAGES_BASELINE_FOLDER = "images-baseline/"
@@ -46,37 +46,81 @@ df_medium_val,
 df_small_trn,
 df_small_val) = setup_dataset_dfs(LABELS_CSV, LABELS_BASELINE_CSV)
 
-######################
-###################### Network setup
-######################
-# More settings
-arch = resnet34
-sz=210
-trn_tfms, _ = tfms_from_model(arch, sz, crop_type=CropType.NO)
-trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
+# ######################
+# ###################### Network setup
+# ######################
+# # More settings
+# arch = resnet34
+# sz=210
+# trn_tfms, _ = tfms_from_model(arch, sz, crop_type=CropType.NO)
+# trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
 
-# Training settings
+# # Training settings
+# bs = 1
+# seq_len = 1
+
+# # Datasets and Dataloaders
+# trn_lds = LinearFeedbackDataset(df_small_trn, trn_tfms, PATH, IMAGES_FOLDER)
+# val_lds = LinearFeedbackDataset(df_small_val, trn_tfms, PATH, IMAGES_FOLDER)
+# trn_dl = FastaiDataLoader(trn_lds, batch_sampler=trn_lds.batch_sampler())
+# val_dl = FastaiDataLoader(val_lds, batch_sampler=val_lds.batch_sampler())
+
+# # Model
+# model_folder = "CNNtoRNNFeedback"
+# model = CNNtoRNNFeedback(1024, 200, 2, seq_len, bs, 14, use_ground_truth=False)
+# layer_groups = [
+#     list(model.encoder.children())[:6],
+#     list(model.encoder.children())[6:],
+#     [model.lstm, model.linear],
+# ]
+
+# # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
+# opt_fn = partial(optim.SGD, momentum=0.9)
+# criterion = F.l1_loss
+
+# learner = Learner(
+#     MockedData(trn_dl, val_dl),
+#     CustomModel(model, layer_groups),
+#     metrics=METRICS,
+#     opt_fn=opt_fn,
+#     crit=criterion,
+#     tmp_name=os.path.join(ROOT, PATH, 'tmp'),
+#     models_name=os.path.join(ROOT, PATH, 'models', model_folder),
+# )
+# # clip and reg_fn needs shouldn't be passed to the constructor because it sets as None anyway...
+# # learner.reg_fn = partial(seq2seq_reg, alpha=2, beta=1)
+# learner.clip = 0.4
+
+
+# mem comsuption: 7200 MB
+sz = 210
+trn_tfms, _ = tfms_from_model(resnet34, sz, crop_type=CropType.NO)
+trn_tfms.tfms.pop(1) # Remove cropping to keep it rectangular
 bs = 1
 seq_len = 1
 
 # Datasets and Dataloaders
-trn_lds = LinearFeedbackDataset(df_small_trn, trn_tfms, PATH, IMAGES_FOLDER)
-val_lds = LinearFeedbackDataset(df_small_val, trn_tfms, PATH, IMAGES_FOLDER)
-trn_dl = FastaiDataLoader(trn_lds, batch_sampler=trn_lds.batch_sampler())
-val_dl = FastaiDataLoader(val_lds, batch_sampler=val_lds.batch_sampler())
+trn_ds = BatchifiedDataset(df_large_trn, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+val_ds = BatchifiedDataset(df_large_val, bs, seq_len, trn_tfms, PATH, IMAGES_FOLDER)
+trn_dl = FastaiDataLoader(trn_ds, batch_sampler=trn_ds.batch_sampler())
+val_dl = FastaiDataLoader(val_ds, batch_sampler=val_ds.batch_sampler())
 
 # Model
-model_folder = "CNNtoRNNFeedback"
-model = CNNtoRNNFeedback(1024, 200, 2, seq_len, bs, 14, use_ground_truth=False)
+model_folder = "CNNtoRNN_new"
+model = CNNtoRNN(encode_size=128, # 1024
+                  hidden_size=32,  # 200
+                  num_layers=2,
+                  bs=bs,
+                  output_size=14)
 layer_groups = [
     list(model.encoder.children())[:6],
     list(model.encoder.children())[6:],
-    [model.lstm, model.linear],
+    [model.encoder_linear, model.lstm, model.linear],
 ]
 
 # opt_fn is used like this: optimizer = opt_fn(trainable_params(model), lr=1e-1)
 opt_fn = partial(optim.SGD, momentum=0.9)
-criterion = F.l1_loss
+criterion = F.mse_loss
 
 learner = Learner(
     MockedData(trn_dl, val_dl),
@@ -97,7 +141,8 @@ learner.clip = 0.4
 ############
 
 # learner.load('nb25-sz210-pre-B')
-learner.load('nb26-sz210-c')
+# learner.load('nb26-sz210-c')
+learner.load('nb28-net2-lrg-h')
 learner.model.eval()
 
 # print_calced_metrics_from_dl(learner.model, val_dl)
@@ -213,7 +258,7 @@ with context() as _:
             img_np = (img_np/255).astype('float32')
             x = trn_tfms(img_np)[np.newaxis, ...] # shape (210, 280, 3) -> (3, 210, 210) -> (1, 3, 210, 210)
             x = Variable(T(x),requires_grad=False, volatile=True)
-            output = learner.model(x, None) # shape (1, 14)
+            output = learner.model(x)#, None) # shape (1, 14)
             pred_indicators = transform_range_output(to_np(output[0]), UNIT_RANGES, INDIC_RANGES)
             print("network raw output", output)
             print("pred_indicators", pred_indicators)
