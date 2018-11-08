@@ -1,0 +1,2 @@
+TORCS_BASE = /home/bcalmeida/dev/DeepDriving/torcs-1.3.6
+MAKE_DEFAULT = /home/bcalmeida/dev/DeepDriving/torcs-1.3.6/Make-default.mk
