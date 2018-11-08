@@ -223,19 +223,32 @@ def get_learner_rnn(model_name):
 
 FEEDBACK = False
 
+### rnn feedback ###
 # learner = get_learner_rnn_feedback('nb26-sz210-c')
 # log_name = 'rnn_feedback.log'
 # feedback = True
 
-# learner = get_learner_rnn('nb28-net2-lrg-h') # 0.155      0.051
+### rnn ###
+#learner = get_learner_rnn('nb28-net2-lrg-h')
+# learner = get_learner_rnn('nb28-net2-lrg-j')
 # log_name = 'driving_log.txt'
 
-learner = get_learner_cnn('nb28-fc-lrg-d') # 0.153      0.060 
-log_name = 'cnn.log'
+### rnn l1 ###
+# rnn_l1    # 0.170      0.053
 
-# learner = get_learner_cnn_l1('nb28-fcl1-lrg-b') # 0.163      0.047
+### cnn ###
+# learner = get_learner_cnn('nb28-fc-lrg-d')
+# log_name = 'cnn.log'
+
+### cnn l1 ###
+# learner = get_learner_cnn_l1('nb28-fcl1-lrg-b')
 # log_name = 'cnn_l1.log'
 
+### cnn and rnn ###
+# #learner_rnn = get_learner_rnn('nb28-net2-lrg-h')
+learner_rnn = get_learner_rnn('nb28-net2-lrg-j')
+learner_cnn = get_learner_cnn('nb28-fc-lrg-d')
+log_name = 'cnn_and_rnn_2.log'
 
 ############
 ############ Model loading
@@ -364,12 +377,29 @@ with context() as driving_log:
             img_np = (img_np/255).astype('float32')
             x = trn_tfms(img_np)[np.newaxis, ...] # shape (210, 280, 3) -> (3, 210, 210) -> (1, 3, 210, 210)
             x = Variable(T(x),requires_grad=False, volatile=True)
-            if FEEDBACK:
-                output = learner.model(x, None) # FEEDBACK
-            else:
-                output = learner.model(x) # shape (1, 14)
-            pred_indicators = transform_range_output(to_np(output[0]), UNIT_RANGES, INDIC_RANGES)
-            print("network raw output", output)
+            
+            # if FEEDBACK:
+            #     output = learner.model(x, None) # FEEDBACK
+            # else:
+            #     output = learner.model(x) # shape (1, 14)
+            # output_np = to_np(output[0])
+
+            # CNN and RNN model
+            output_rnn = learner_rnn.model(x) # shape (1, 14)
+            output_cnn = learner_cnn.model(x)
+            # # just angle from cnn
+            # output_np = to_np(output_rnn[0])
+            # output_np[0] = to_np(output_cnn[0])[0] # angle
+            # # all except distances from cnn
+            output_np = to_np(output_cnn[0])
+            output_np[4] = to_np(output_rnn[0])[4] # d_L
+            output_np[5] = to_np(output_rnn[0])[5] # d_R
+            output_np[10] = to_np(output_rnn[0])[10] # d_LL
+            output_np[11] = to_np(output_rnn[0])[11] # d_MM
+            output_np[12] = to_np(output_rnn[0])[12] # d_RR
+
+            pred_indicators = transform_range_output(output_np, UNIT_RANGES, INDIC_RANGES)
+            print("network raw output", output_np)
             print("pred_indicators", pred_indicators)
 
             indicators_formatted = inds_net_to_cntrl(pred_indicators)
@@ -384,7 +414,7 @@ with context() as driving_log:
             ########################################################
             ############################ metrics
             ########################################################
-            inds_netfmt_unitrng = to_np(output[0])
+            inds_netfmt_unitrng = to_np(output_np)
             inds_netfmt_indicrng = transform_range_output(inds_netfmt_unitrng, UNIT_RANGES, INDIC_RANGES)
 
             gtruth_netfmt_indicrng = inds_ctrl_to_net(ground_truth)
